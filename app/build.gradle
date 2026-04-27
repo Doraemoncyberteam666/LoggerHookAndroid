@@ -6,14 +6,29 @@ plugins {
 android {
     namespace 'com.dct.hooklogger'
     compileSdk 35
+    ndkVersion '26.1.10909125'
 
     defaultConfig {
         applicationId 'com.dct.hooklogger'
         minSdk 23
         targetSdk 35
-        versionCode 1
-        versionName '1.0'
+        versionCode 2
+        versionName '1.1'
+
+        ndk {
+            // Build for the four ABIs the Play store still ships. armeabi-v7a stays so the
+            // APK works on older test devices; arm64-v8a is the modern default.
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags '-fno-rtti', '-fno-exceptions'
+                arguments '-DANDROID_STL=c++_static'
+            }
+        }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -21,4 +36,25 @@ android {
     kotlinOptions {
         jvmTarget = '1.8'
     }
+
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
 }

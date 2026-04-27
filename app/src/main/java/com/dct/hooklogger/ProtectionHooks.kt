@@ -8,6 +8,11 @@ internal object ProtectionHooks {
     fun init(context: Context?) {
         if (context == null) return
         HookRuntime.appContext = context.applicationContext ?: context
+        HookConfig.loadFrom(HookRuntime.appContext)
+        HookRuntime.write(
+            "INIT",
+            "Hook.init complete native=${NativeHook.isAvailable()} version=${NativeHook.version()} level=${HookConfig.level} json=${HookConfig.jsonOutput}"
+        )
     }
 
     fun disableLogcat() {
