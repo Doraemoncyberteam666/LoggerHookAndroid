@@ -161,7 +161,7 @@ This logger includes methods to help evade anti-tampering and runtime protection
    ```smali
    invoke-static {v0}, Lcom/dct/hooklogger/Hook;->sanitizedTracerPidStatus(Ljava/lang/String;)Ljava/lang/String;
    ```
-   - Strip Frida-listening rows from `/proc/net/tcp[6]` output:
+   - Strip Frida-listening rows from `/proc/net/tcp[6]` output (matches frida-server defaults 27042/27043):
    ```smali
    invoke-static {v0}, Lcom/dct/hooklogger/Hook;->sanitizedProcNetTcp(Ljava/lang/String;)Ljava/lang/String;
    ```

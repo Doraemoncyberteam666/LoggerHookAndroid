@@ -52,4 +52,19 @@ class HookConfigTest {
         HookConfig.applyProperties(props)
         assertEquals(32, HookConfig.rotationCount)
     }
+
+    @Test
+    fun queueCapacityIsAppliedAndClamped() {
+        val props = Properties().apply { setProperty("queueCapacity", "256") }
+        HookConfig.applyProperties(props)
+        assertEquals(256, HookConfig.queueCapacity)
+
+        val tooSmall = Properties().apply { setProperty("queueCapacity", "1") }
+        HookConfig.applyProperties(tooSmall)
+        assertEquals(16, HookConfig.queueCapacity)
+
+        val tooLarge = Properties().apply { setProperty("queueCapacity", "9999999") }
+        HookConfig.applyProperties(tooLarge)
+        assertEquals(1 shl 16, HookConfig.queueCapacity)
+    }
 }

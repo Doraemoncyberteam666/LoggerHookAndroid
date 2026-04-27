@@ -33,12 +33,11 @@ namespace {
 constexpr const char* kVersion = "dcthook/1.0";
 
 // Frida-related ports we want stripped from /proc/net/tcp[6] output.
-// Hex (uppercase) representations of 27042, 27043, 5252, 27000.
+// Hex (uppercase) representations of frida-server's documented defaults: 27042, 27043.
+// Speculative entries are intentionally omitted to avoid false positives.
 const std::vector<std::string> kFridaPortsHex = {
-    "69A2",
-    "69A3",
-    "5252",
-    "6978",
+    "69A2",  // 27042 — frida-server default
+    "69A3",  // 27043 — frida-server alt / gadget
 };
 
 // ---------- helpers ----------

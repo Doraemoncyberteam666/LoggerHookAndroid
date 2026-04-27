@@ -12,16 +12,15 @@ internal object AntiAnalysisHooks {
     /**
      * Default Frida server / gadget ports. Lines in `/proc/net/tcp[6]` that match any of
      * these (in either local or remote slot) are dropped by [sanitizedProcNetTcp].
+     *
+     * Only the documented frida-server defaults are listed — adding speculative ports causes
+     * false positives that strip benign rows.
      */
     private val FRIDA_PORTS_HEX: Set<String> = setOf(
-        // 27042
+        // 27042 — frida-server default
         "69A2",
-        // 27043
-        "69A3",
-        // common gadget alt
-        "5252",
-        // 27000 (older builds)
-        "6978"
+        // 27043 — frida-server "alt" / gadget
+        "69A3"
     ).map { it.uppercase(Locale.US) }.toSet()
 
     private val LIBRARY_BLOCKLIST = listOf(

@@ -7,10 +7,10 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.ThreadFactory
-import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 internal object HookRuntime {
     internal const val TAG = "DCT-HOOK"
@@ -22,15 +22,28 @@ internal object HookRuntime {
     @Volatile
     var useLogcat = true
 
-    private val io = ThreadPoolExecutor(
-        1, 1,
-        0L, TimeUnit.MILLISECONDS,
-        LinkedBlockingQueue<Runnable>(HookConfig.queueCapacity),
-        ThreadFactory { r ->
-            Thread(r, "dct-hook-io").apply { isDaemon = true }
-        },
-        ThreadPoolExecutor.DiscardPolicy() // drop on bounded-queue overflow
-    )
+    /**
+     * Single-threaded I/O executor. We use an *unbounded* queue and gate enqueues with
+     * [pending] so the [HookConfig.queueCapacity] runtime value stays effective. (Constructing
+     * a `LinkedBlockingQueue(capacity)` here would freeze the limit at static-init time.)
+     */
+    private val io: ExecutorService = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "dct-hook-io").apply { isDaemon = true }
+    }
+    private val pending = AtomicInteger(0)
+
+    private fun submit(task: Runnable) {
+        val cap = HookConfig.queueCapacity
+        if (cap > 0 && pending.get() >= cap) return // drop on overflow
+        pending.incrementAndGet()
+        try {
+            io.execute {
+                try { task.run() } finally { pending.decrementAndGet() }
+            }
+        } catch (_: Throwable) {
+            pending.decrementAndGet()
+        }
+    }
 
     private val timeFormatter = ThreadLocal.withInitial {
         SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
@@ -56,7 +69,7 @@ internal object HookRuntime {
                     HookConfig.Level.ERROR -> Log.e(TAG, "[$tag] $message")
                 }
             }
-            io.execute {
+            submit {
                 safe {
                     val file = getLogFile() ?: return@safe
                     file.parentFile?.mkdirs()
@@ -79,6 +92,7 @@ internal object HookRuntime {
             return
         }
         try {
+            @Suppress("UnusedReturnValue")
             latch.await(timeoutMs, TimeUnit.MILLISECONDS)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
