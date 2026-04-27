@@ -72,7 +72,7 @@ object AutoBypassHooks {
     ): Report {
         val initialized = HookRuntime.runCatchingForJni("autoBypass.init") {
             ProtectionHooks.init(context)
-            true
+            context != null
         } ?: false
 
         val crashesSuppressed = HookRuntime.runCatchingForJni("autoBypass.crashes") {
