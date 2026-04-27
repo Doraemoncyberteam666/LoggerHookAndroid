@@ -75,7 +75,7 @@ internal object LoggingHooks {
         sb.append(label ?: "bundle").append(":\n")
         try {
             for (key in bundle.keySet()) {
-                val value = bundle.get(key)
+                @Suppress("DEPRECATION") val value = bundle.get(key)
                 sb.append("  ").append(key).append(" = ").append(HookRuntime.safeString(value)).append("\n")
             }
         } catch (t: Throwable) {

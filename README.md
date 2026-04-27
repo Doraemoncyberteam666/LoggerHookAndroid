@@ -28,7 +28,13 @@ invoke-static {v0, v1}, Lcom/dct/hooklogger/Hook;->dumpObj(Ljava/lang/String;Lja
 invoke-static {v0, v1}, Lcom/dct/hooklogger/Hook;->bundle(Ljava/lang/String;Landroid/os/Bundle;)V
 invoke-static {}, Lcom/dct/hooklogger/Hook;->thread()V
 invoke-static {v0}, Lcom/dct/hooklogger/Hook;->init(Landroid/content/Context;)V
+invoke-static {}, Lcom/dct/hooklogger/Hook;->flush()V
+invoke-static {v0}, Lcom/dct/hooklogger/Hook;->setLevel(Ljava/lang/String;)V
+invoke-static {v0}, Lcom/dct/hooklogger/Hook;->setJsonOutput(Z)V
 ```
+
+The full bypass surface (TLS, Frida/Xposed, Crypto, Network, Intent, Reflection)
+is documented in the sections below.
 
 ## Bypassing Runtime Protections
 
@@ -130,6 +136,113 @@ This logger includes methods to help evade anti-tampering and runtime protection
    invoke-static {v0}, Lcom/dct/hooklogger/Hook;->sanitizedBatteryLevel(I)I
    ```
 
+8. **Bypass TLS Pinning / Hostname Verification:**
+   - Replace `X509TrustManager.checkServerTrusted([..], String)V`:
+   ```smali
+   invoke-static {p1, p2}, Lcom/dct/hooklogger/Hook;->acceptAllCheckServerTrusted([Ljava/security/cert/X509Certificate;Ljava/lang/String;)V
+   ```
+   - Replace the Conscrypt-style 3-arg variant `(chain, authType, host)`:
+   ```smali
+   invoke-static {p1, p2, p3}, Lcom/dct/hooklogger/Hook;->acceptAllCheckServerTrustedHosted([Ljava/security/cert/X509Certificate;Ljava/lang/String;Ljava/lang/String;)V
+   ```
+   - Replace `HostnameVerifier.verify` to always accept:
+   ```smali
+   invoke-static {p0, p1}, Lcom/dct/hooklogger/Hook;->acceptAllHostnameVerifier(Ljava/lang/String;Ljavax/net/ssl/SSLSession;)Z
+   move-result v0
+   return v0
+   ```
+   - Replace `okhttp3.CertificatePinner.check`:
+   ```smali
+   invoke-static {p1, p2}, Lcom/dct/hooklogger/Hook;->fakePinnerSatisfied(Ljava/lang/String;Ljava/util/List;)V
+   ```
+
+9. **Bypass Frida / Xposed Detection:**
+   - Sanitize `/proc/self/status` content used for `TracerPid` detection:
+   ```smali
+   invoke-static {v0}, Lcom/dct/hooklogger/Hook;->sanitizedTracerPidStatus(Ljava/lang/String;)Ljava/lang/String;
+   ```
+   - Strip Frida-listening rows from `/proc/net/tcp[6]` output:
+   ```smali
+   invoke-static {v0}, Lcom/dct/hooklogger/Hook;->sanitizedProcNetTcp(Ljava/lang/String;)Ljava/lang/String;
+   ```
+   - Strip frida/xposed/substrate lines from `/proc/self/maps` output:
+   ```smali
+   invoke-static {v0}, Lcom/dct/hooklogger/Hook;->sanitizedProcMaps(Ljava/lang/String;)Ljava/lang/String;
+   ```
+   - Filter known instrumentation libs out of a list returned by an enumerator:
+   ```smali
+   invoke-static {v0}, Lcom/dct/hooklogger/Hook;->sanitizedLoadedLibraries([Ljava/lang/String;)[Ljava/lang/String;
+   ```
+   - Force-`false` the boolean from a custom Frida probe:
+   ```smali
+   invoke-static {}, Lcom/dct/hooklogger/Hook;->fakeFridaListening()Z
+   ```
+   - Native variants that read the file from C++ (helpful when the Java path is
+     monitored or when you want to use the included `libdcthook.so`):
+   ```smali
+   invoke-static {v0}, Lcom/dct/hooklogger/Hook;->nativeSanitizedStatusFile(Ljava/lang/String;)Ljava/lang/String;
+   invoke-static {v0}, Lcom/dct/hooklogger/Hook;->nativeSanitizedProcNetTcp(Ljava/lang/String;)Ljava/lang/String;
+   invoke-static {v0}, Lcom/dct/hooklogger/Hook;->isLibraryMapped(Ljava/lang/String;)Z
+   ```
+
+10. **Crypto / Network / Intent / Reflection Tap Points:**
+    - Tap a `Cipher.doFinal(byte[])` call to log algorithm + IV + payload:
+    ```smali
+    invoke-static {v0, v1, v2}, Lcom/dct/hooklogger/Hook;->logCipher(Ljava/lang/String;Ljavax/crypto/Cipher;[B)V
+    ```
+    - Tap an HTTP request before it leaves the app:
+    ```smali
+    invoke-static {v0, v1, v2, v3}, Lcom/dct/hooklogger/Hook;->logHttpRequest(Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;[B)V
+    ```
+    - Tap a `startActivity`/`sendBroadcast` site to dump the intent:
+    ```smali
+    invoke-static {v0}, Lcom/dct/hooklogger/Hook;->logActivityStart(Landroid/content/Intent;)V
+    ```
+    - Smali-friendly reflection (no dex-time reference to private types):
+    ```smali
+    invoke-static {v0, v1, v2, v3}, Lcom/dct/hooklogger/Hook;->invokeStatic(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Class;[Ljava/lang/Object;)Ljava/lang/Object;
+    ```
+
+## Native helpers (`libdcthook.so`)
+
+The APK ships a small JNI library (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`)
+that backs a few of the bypass paths. Each native call has a pure-Kotlin
+fallback so the APK keeps working even when the `.so` cannot be loaded.
+
+| Method on `Hook` | What it does |
+| --- | --- |
+| `nativeAvailable()` | `true` if `libdcthook.so` was loaded |
+| `nativeVersion()` | Native build identifier |
+| `nativeSanitizedStatusFile(path)` | Reads any `*/status` file and forces `TracerPid: 0` |
+| `nativeSanitizedProcNetTcp(path)` | Reads `/proc/net/tcp[6]` and drops Frida-port rows |
+| `isLibraryMapped(needle)` | Scans `/proc/self/maps` line-by-line for a substring |
+
+## Runtime configuration
+
+`HookConfig` exposes runtime knobs you can flip from smali via `Hook.setLevel`
+/ `Hook.setJsonOutput` / `Hook.setMaxLogBytes`. You can also drop a properties
+file at:
+
+```text
+<external files dir>/dct_hook.properties
+```
+
+Recognised keys:
+
+```
+level=VERBOSE|DEBUG|INFO|WARN|ERROR
+tagFilter=STACK,DUMP
+jsonOutput=true|false
+useLogcat=true|false
+maxLogBytes=5242880
+rotationCount=3
+queueCapacity=2048
+```
+
+The runtime now rotates the log file once it exceeds `maxLogBytes` (default
+5 MiB), keeping `dct_hook.log.1`, `.2`, ... up to `rotationCount`. Set
+`rotationCount=0` to truncate instead of rotating.
+
 ## Log location
 
 Default log path after `Hook.init(context)`:
@@ -145,3 +258,5 @@ When merged into another app, the package path becomes the host app package.
 - `getExternalFilesDir()` does not need runtime storage permission.
 - Legacy storage permissions are included for old Android versions.
 - All hook methods are `@JvmStatic` and crash-safe.
+- Native helpers gracefully fall back to pure-Kotlin equivalents on ABIs where
+  the bundled `.so` cannot be loaded.
