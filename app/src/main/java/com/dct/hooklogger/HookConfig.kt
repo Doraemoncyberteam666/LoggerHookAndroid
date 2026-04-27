@@ -4,6 +4,7 @@ import android.content.Context
 import java.io.File
 import java.util.Locale
 import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Runtime configuration for the hook logger.
@@ -44,7 +45,12 @@ object HookConfig {
     @Volatile var rotationCount: Int = 3
     @Volatile var queueCapacity: Int = 2048
 
-    private val tagFilter: MutableSet<String> = LinkedHashSet()
+    /**
+     * Set of suppressed tags. Backed by a [ConcurrentHashMap] so concurrent reads from
+     * arbitrary caller threads (`HookRuntime.write` → `isTagSuppressed`) and writes from
+     * `Hook.init` / `Hook.suppressTag` cannot corrupt the set or trigger CME.
+     */
+    private val tagFilter: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     fun isTagSuppressed(tag: String): Boolean {
         if (tagFilter.isEmpty()) return false

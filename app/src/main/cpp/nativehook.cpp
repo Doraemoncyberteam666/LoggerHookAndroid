@@ -174,6 +174,7 @@ Java_com_dct_hooklogger_NativeHook_nativeSanitizedStatusFile(
         JNIEnv* env, jclass /*clazz*/, jstring jPath) {
     if (jPath == nullptr) return env->NewStringUTF("");
     const char* path = env->GetStringUTFChars(jPath, nullptr);
+    if (path == nullptr) return env->NewStringUTF("");
     std::string buf;
     bool ok = readFile(path, buf);
     env->ReleaseStringUTFChars(jPath, path);
@@ -188,6 +189,7 @@ Java_com_dct_hooklogger_NativeHook_nativeSanitizedProcNetTcp(
         JNIEnv* env, jclass /*clazz*/, jstring jPath) {
     if (jPath == nullptr) return env->NewStringUTF("");
     const char* path = env->GetStringUTFChars(jPath, nullptr);
+    if (path == nullptr) return env->NewStringUTF("");
     std::string buf;
     bool ok = readFile(path, buf);
     env->ReleaseStringUTFChars(jPath, path);
@@ -202,6 +204,7 @@ Java_com_dct_hooklogger_NativeHook_nativeIsLibraryMapped(
         JNIEnv* env, jclass /*clazz*/, jstring jNeedle) {
     if (jNeedle == nullptr) return JNI_FALSE;
     const char* raw = env->GetStringUTFChars(jNeedle, nullptr);
+    if (raw == nullptr) return JNI_FALSE;
     std::string needle(raw);
     env->ReleaseStringUTFChars(jNeedle, raw);
     if (needle.empty()) return JNI_FALSE;
@@ -218,7 +221,12 @@ Java_com_dct_hooklogger_NativeHook_nativeAppendLogLine(
     if (jPath == nullptr || jLine == nullptr) return -1;
 
     const char* path = env->GetStringUTFChars(jPath, nullptr);
+    if (path == nullptr) return -1;
     const char* line = env->GetStringUTFChars(jLine, nullptr);
+    if (line == nullptr) {
+        env->ReleaseStringUTFChars(jPath, path);
+        return -1;
+    }
     int written = -1;
 
     int fd = ::open(path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0644);
