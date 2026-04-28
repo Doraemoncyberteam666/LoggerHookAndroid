@@ -321,4 +321,55 @@ object Hook {
 
     @JvmStatic
     fun clear() = LoggingHooks.clear()
+
+    // ---------------- Auto bypass ("lockdown" mode) ----------------
+
+    /**
+     * Single-call "install everything that can be installed at runtime" mode.
+     *
+     * Smali equivalents:
+     *
+     * ```smali
+     * invoke-static {p0}, Lcom/dct/hooklogger/Hook;->autoBypassAll(Landroid/content/Context;)V
+     *
+     * # Or with options (disableLogcat, spoofBuildFields, installSslDefaults):
+     * invoke-static {p0, v1, v2, v3}, Lcom/dct/hooklogger/Hook;->autoBypassAll(Landroid/content/Context;ZZZ)V
+     * ```
+     *
+     * See [AutoBypassHooks] for the full list of bypasses applied.
+     */
+    @JvmStatic
+    fun autoBypassAll(context: Context?) {
+        AutoBypassHooks.installAll(context)
+    }
+
+    @JvmStatic
+    fun autoBypassAll(
+        context: Context?,
+        disableLogcat: Boolean,
+        spoofBuildFields: Boolean,
+        installSslDefaults: Boolean
+    ) {
+        AutoBypassHooks.installAll(context, disableLogcat, spoofBuildFields, installSslDefaults)
+    }
+
+    /** Alias for [autoBypassAll] with [disableLogcat]=true and the rest enabled. */
+    @JvmStatic
+    fun lockdown(context: Context?) {
+        AutoBypassHooks.installAll(
+            context,
+            disableLogcat = true,
+            spoofBuildFields = true,
+            installSslDefaults = true
+        )
+    }
+
+    @JvmStatic
+    fun spoofBuildFields(): Int = AutoBypassHooks.spoofBuildFields()
+
+    @JvmStatic
+    fun installAllTrustingSslDefaults(): Boolean = AutoBypassHooks.installAllTrustingSslDefaults()
+
+    @JvmStatic
+    fun installPermissiveHostnameVerifier(): Boolean = AutoBypassHooks.installPermissiveHostnameVerifier()
 }

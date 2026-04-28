@@ -253,6 +253,43 @@ Default log path after `Hook.init(context)`:
 
 When merged into another app, the package path becomes the host app package.
 
+## Auto-bypass / "lockdown" mode
+
+When you don't want to hand-patch every call site, drop a single `invoke-static` at
+the host app's earliest init point and let `AutoBypassHooks` install everything
+that can actually be enabled at runtime:
+
+```smali
+# Application.attachBaseContext(Context) is the typical drop point.
+invoke-static {p1}, Lcom/dct/hooklogger/Hook;->autoBypassAll(Landroid/content/Context;)V
+```
+
+Or with options (`disableLogcat`, `spoofBuildFields`, `installSslDefaults`):
+
+```smali
+invoke-static {p0, v1, v2, v3}, Lcom/dct/hooklogger/Hook;->autoBypassAll(Landroid/content/Context;ZZZ)V
+```
+
+What gets applied:
+
+| Step | What it does |
+| --- | --- |
+| `Hook.init(ctx)` | Wires up the log path + loads `dct_hook.properties` |
+| `suppressCrashes()` | Default `UncaughtExceptionHandler` swallows + logs |
+| `disableLogcat()` (opt-in) | Routes all output to the file only |
+| `spoofBuildFields()` | Reflectively rewrites `Build.{FINGERPRINT,HARDWARE,PRODUCT,MODEL,MANUFACTURER,BRAND,DEVICE,BOARD,TAGS,TYPE,BOOTLOADER,HOST}` to a stock-Pixel profile |
+| `installAllTrustingSslDefaults()` | All-trusting JVM-default `SSLContext` + `HttpsURLConnection` socket factory |
+| `installPermissiveHostnameVerifier()` | All-accepting default `HostnameVerifier` |
+| Native preload | Forces `libdcthook.so` to load so `NativeHook` short-circuits the proc-fs sanitizers |
+
+> Note: this is a runtime convenience. Code that builds its own `SSLContext` / OkHttp
+> client / Retrofit instance still needs the per-call-site smali patches in the
+> `SSLBypassHooks` / `AntiAnalysisHooks` sections above. `autoBypassAll` is meant
+> to be **complementary** to the per-site hooks, not a full replacement.
+
+There is also a one-arg `Hook.lockdown(ctx)` alias that turns on every flag,
+including `disableLogcat`, for the most aggressive setup.
+
 ## Notes
 
 - `getExternalFilesDir()` does not need runtime storage permission.
